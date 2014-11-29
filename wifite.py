@@ -2035,7 +2035,7 @@ def get_bssid_from_cap(essid, capfile):
 
     cmd = ['tshark',
            '-r', capfile,
-           '-R', 'eapol',
+           '-R', 'eapol', '-2',
            '-n']
     proc = Popen(cmd, stdout=PIPE, stderr=DN)
     proc.wait()
@@ -2314,7 +2314,7 @@ class WPAAttack(Attack):
             # Call Tshark to return list of EAPOL packets in cap file.
             cmd = ['tshark',
                    '-r', capfile,  # Input file
-                   '-R', 'eapol',  # Filter (only EAPOL packets)
+                   '-R', 'eapol', '-2', # Filter (only EAPOL packets)
                    '-n']  # Do not resolve names (MAC vendors)
             proc = Popen(cmd, stdout=PIPE, stderr=DN)
             proc.wait()
@@ -2510,7 +2510,7 @@ class WPAAttack(Attack):
             # strip results with tshark
             cmd = ['tshark',
                    '-r', capfile,  # input file
-                   '-R', 'eapol || wlan_mgt.tag.interpretation',  # filter
+                   '-R', 'eapol || wlan_mgt.tag.interpretation', '-2',  # filter
                    '-w', capfile + '.temp']  # output file
             proc_strip = call(cmd, stdout=DN, stderr=DN)
 
