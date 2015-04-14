@@ -1512,7 +1512,7 @@ class RunEngine:
                     if len(row) < 2:
                         continue
                     if not hit_clients:
-                        if len(row) < 14:
+                        if len(row) < 14 and row[0].strip() != 'Station MAC':
                             continue
                         if row[0].strip() == 'Station MAC':
                             hit_clients = True
@@ -2163,6 +2163,7 @@ class WPAAttack(Attack):
             cmd = ['airodump-ng',
                    '-w', self.RUN_CONFIG.temp + 'wpa',
                    '-c', self.target.channel,
+                   '--ignore-negative-one',
                    '--bssid', self.target.bssid, self.iface]
             proc_read = Popen(cmd, stdout=DN, stderr=DN)
 
@@ -2682,6 +2683,7 @@ class WEPAttack(Attack):
         cmd_airodump = ['airodump-ng',
                         '-w', self.RUN_CONFIG.temp + 'wep',  # Output file name (wep-01.cap, wep-01.csv)
                         '-c', self.target.channel,  # Wireless channel
+                        '--ignore-negative-one',
                         '--bssid', self.target.bssid,
                         self.iface]
         proc_airodump = Popen(cmd_airodump, stdout=DN, stderr=DN)
@@ -3050,7 +3052,7 @@ class WEPAttack(Attack):
                    '--ignore-negative-one',
                    '-1', '0',  # Fake auth, no delay
                    '-a', target.bssid,
-                   '-T', '1']  # Make 1 attempt
+                   '-T', '5']  # Make 1 attempt
             if target.ssid != '':
                 cmd.append('-e')
                 cmd.append(target.ssid)
