@@ -180,7 +180,7 @@ class RunConfiguration:
 
         self.WPA_FINDINGS = []  # List of strings containing info on successful WPA attacks
         self.WPA_DONT_CRACK = False  # Flag to skip cracking of handshakes
-        self.WPA_DICTIONARY = '/pentest/web/wfuzz/wordlist/fuzzdb/wordlists-user-passwd/passwds/phpbb.txt'
+        self.WPA_DICTIONARY = '/root/ruo3.txt'
         if not os.path.exists(self.WPA_DICTIONARY): self.WPA_DICTIONARY = ''
 
         # Various programs to use when checking for a four-way handshake.
@@ -1491,7 +1491,7 @@ class RunEngine:
                 print GR + ' [+]' + W + ' starting ' + G + 'WPA cracker' + W + ' on %s%d handshake%s' % (
                 G, caps, W if caps == 1 else 's' + W)
                 for cap in self.RUN_CONFIG.WPA_CAPS_TO_CRACK:
-                    wpa_crack(cap)
+                    wpa_crack(cap, self.RUN_CONFIG)
 
         print ''
         self.RUN_CONFIG.exit_gracefully(0)
@@ -2035,7 +2035,7 @@ def get_bssid_from_cap(essid, capfile):
 
     cmd = ['tshark',
            '-r', capfile,
-           '-R', 'eapol', '-2',
+           '-R', 'eapol', 
            '-n']
     proc = Popen(cmd, stdout=PIPE, stderr=DN)
     proc.wait()
@@ -2231,8 +2231,8 @@ class WPAAttack(Attack):
                 copy(self.RUN_CONFIG.temp + 'wpa-01.cap', self.RUN_CONFIG.temp + 'wpa-01.cap.temp')
 
                 # Save copy of cap file (for debugging)
-                #remove_file('/root/new/wpa-01.cap')
-                #copy(temp + 'wpa-01.cap', '/root/new/wpa-01.cap')
+                # remove_file('/root/new/wpa-01.cap')
+                # copy(self.RUN_CONFIG.temp + 'wpa-01.cap.temp', '/root/new/wpa-01.cap')
 
                 # Check for handshake
                 if self.has_handshake(self.target, self.RUN_CONFIG.temp + 'wpa-01.cap.temp'):
@@ -2249,7 +2249,8 @@ class WPAAttack(Attack):
 
                     # Save a copy of the handshake
                     rename(self.RUN_CONFIG.temp + 'wpa-01.cap.temp', save_as)
-
+                    remove_file('/root/new/wpa-01.cap')
+                    copy(save_as, '/root/new/wpa-01.cap')
                     print '\n %s %shandshake captured%s! saved as "%s"' % (
                     GR + sec_to_hms(seconds_running) + W, G, W, G + save_as + W)
                     self.RUN_CONFIG.WPA_FINDINGS.append(
@@ -2315,7 +2316,7 @@ class WPAAttack(Attack):
             # Call Tshark to return list of EAPOL packets in cap file.
             cmd = ['tshark',
                    '-r', capfile,  # Input file
-                   '-R', 'eapol', '-2', # Filter (only EAPOL packets)
+                   '-R', 'eapol',  # Filter (only EAPOL packets)
                    '-n']  # Do not resolve names (MAC vendors)
             proc = Popen(cmd, stdout=PIPE, stderr=DN)
             proc.wait()
@@ -2370,8 +2371,7 @@ class WPAAttack(Attack):
                     src = fields[2].lower()  # Source MAC address
                     dst = fields[4].lower()  # Destination MAC address
                     #msg = fields[9][0]      # The message number (1, 2, 3, or 4)
-                    msg = fields[-1][0]
-
+                    msg = fields[-3][0]
                     # First, third msgs in 4-way handshake are from the target to client
                     if msg_num % 2 == 1 and (src != target.bssid.lower() or dst != client):
                         continue
@@ -2499,23 +2499,24 @@ class WPAAttack(Attack):
             Uses Tshark or Pyrit to strip all non-handshake packets from a .cap file
             File in location 'capfile' is overwritten!
         """
-        output_file = capfile
+        output_file = capfile + '.temp'
         if program_exists('pyrit'):
             cmd = ['pyrit',
                    '-r', capfile,
                    '-o', output_file,
                    'stripLive']
             call(cmd, stdout=DN, stderr=DN)
+            rename(output_file, capfile)
 
         elif program_exists('tshark'):
             # strip results with tshark
             cmd = ['tshark',
                    '-r', capfile,  # input file
-                   '-R', 'eapol || wlan_mgt.tag.interpretation', '-2',  # filter
+                   '-R', 'eapol || wlan_mgt.tag.interpretation',  # filter
                    '-w', capfile + '.temp']  # output file
             proc_strip = call(cmd, stdout=DN, stderr=DN)
 
-            rename(capfile + '.temp', output_file)
+            rename(capfile + '.temp', capfile)
 
         else:
             print R + " [!]" + O + " unable to strip .cap file: neither pyrit nor tshark were found" + W
@@ -2553,7 +2554,7 @@ def wpa_crack(capfile, RUN_CONFIG):
         kt = 0  # Keys tested
         kps = 0  # Keys per second
         while True:
-            time.sleep(1)
+            time.sleep(5)
 
             if proc.poll() != None:  # aircrack stopped
                 if os.path.exists(RUN_CONFIG.temp + 'wpakey.txt'):
