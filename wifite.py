@@ -172,7 +172,7 @@ class RunConfiguration:
         self.WPA_STRIP_HANDSHAKE = True  # Use pyrit or tshark (if applicable) to strip handshake
         self.WPA_DEAUTH_COUNT = 5  # Count to send deauthentication packets
         self.WPA_DEAUTH_TIMEOUT = 10  # Time to wait between deauthentication bursts (in seconds)
-        self.WPA_ATTACK_TIMEOUT = 500  # Total time to allow for a handshake attack (in seconds)
+        self.WPA_ATTACK_TIMEOUT = 1200  # Total time to allow for a handshake attack (in seconds)
         self.WPA_HANDSHAKE_DIR = 'hs'  # Directory in which handshakes .cap files are stored
         # Strip file path separator if needed
         if self.WPA_HANDSHAKE_DIR != '' and self.WPA_HANDSHAKE_DIR[-1] == os.sep:
@@ -871,7 +871,10 @@ class RunEngine:
         mac_anonymize(iface)
         print GR + ' [+]' + W + ' enabling monitor mode on %s...' % (G + iface + W),
         stdout.flush()
-        call(['airmon-ng', 'start', iface], stdout=DN, stderr=DN)
+        #call(['airmon-ng', 'start', iface], stdout=DN, stderr=DN)
+        call(['ifconfig', iface, 'down'], stdout=DN, stderr=DN)
+        call(['iwconfig', iface, 'mode', 'monitor'], stdout=DN, stderr=DN)
+        call(['ifconfig', iface, 'up'], stdout=DN, stderr=DN)
         print 'done'
         self.RUN_CONFIG.WIRELESS_IFACE = ''  # remove this reference as we've started its monitoring counterpart
         self.RUN_CONFIG.IFACE_TO_TAKE_DOWN = self.get_iface()
@@ -890,7 +893,10 @@ class RunEngine:
         if self.RUN_CONFIG.IFACE_TO_TAKE_DOWN == '': return
         print GR + ' [+]' + W + ' disabling monitor mode on %s...' % (G + self.RUN_CONFIG.IFACE_TO_TAKE_DOWN + W),
         stdout.flush()
-        call(['airmon-ng', 'stop', self.RUN_CONFIG.IFACE_TO_TAKE_DOWN], stdout=DN, stderr=DN)
+        #call(['airmon-ng', 'stop', self.RUN_CONFIG.IFACE_TO_TAKE_DOWN], stdout=DN, stderr=DN)
+        call(['ifconfig', self.RUN_CONFIG.IFACE_TO_TAKE_DOWN, 'down'], stdout=DN, stderr=DN)
+        call(['iwconfig', self.RUN_CONFIG.IFACE_TO_TAKE_DOWN, 'mode', 'managed'], stdout=DN, stderr=DN)
+        call(['ifconfig', self.RUN_CONFIG.IFACE_TO_TAKE_DOWN, 'up'], stdout=DN, stderr=DN)
         print 'done'
 
     def rtl8187_fix(self, iface):
@@ -998,7 +1004,7 @@ class RunEngine:
 
         proc = Popen(['airmon-ng'], stdout=PIPE, stderr=DN)
         for line in proc.communicate()[0].split('\n'):
-            if len(line) == 0 or line.startswith('Interface'): continue
+            if len(line) == 0 or line.startswith('Interface') or line.startswith('PHY'): continue
             monitors.append(line)
 
         if len(monitors) == 0:
@@ -1006,11 +1012,11 @@ class RunEngine:
             print R + ' [!]' + O + " you need to plug in a wifi device or install drivers.\n" + W
             self.RUN_CONFIG.exit_gracefully(0)
         elif self.RUN_CONFIG.WIRELESS_IFACE != '' and monitors.count(self.RUN_CONFIG.WIRELESS_IFACE) > 0:
-            monitor = monitors[0][:monitors[0].find('\t')]
+            monitor = monitors[0][monitors[0].find('\t')+1:monitors[0].find('\t',monitors[0].find('\t')+1)]
             return self.enable_monitor_mode(monitor)
 
         elif len(monitors) == 1:
-            monitor = monitors[0][:monitors[0].find('\t')]
+            monitor = monitors[0][monitors[0].find('\t')+1:monitors[0].find('\t',monitors[0].find('\t')+1)]
             return self.enable_monitor_mode(monitor)
 
         print GR + " [+]" + W + " available wireless devices:"
@@ -1022,7 +1028,7 @@ class RunEngine:
         while not ri.isdigit() or int(ri) < 1 or int(ri) > len(monitors):
             ri = raw_input(" [+] select number of device to put into monitor mode (%s1-%d%s): " % (G, len(monitors), W))
         i = int(ri)
-        monitor = monitors[i - 1][:monitors[i - 1].find('\t')]
+        monitor = monitors[i - 1][monitors[i-1].find('\t')+1:monitors[i-1].find('\t',monitors[i-1].find('\t')+1)]
 
         return self.enable_monitor_mode(monitor)
 
@@ -1998,7 +2004,7 @@ def get_essid_from_cap(bssid, capfile):
     cmd = ['tshark',
            '-r', capfile,
            '-R', 'wlan.fc.type_subtype == 0x05 && wlan.sa == %s' % bssid,
-           '-n']
+           '-n', '-2']
     proc = Popen(cmd, stdout=PIPE, stderr=DN)
     proc.wait()
     for line in proc.communicate()[0].split('\n'):
@@ -2025,7 +2031,7 @@ def get_bssid_from_cap(essid, capfile):
         cmd = ['tshark',
                '-r', capfile,
                '-R', 'wlan_mgt.ssid == "%s" && wlan.fc.type_subtype == 0x05' % (essid),
-               '-n',  # Do not resolve MAC vendor names
+               '-n', '-2',  # Do not resolve MAC vendor names
                '-T', 'fields',  # Only display certain fields
                '-e', 'wlan.sa']  # souce MAC address
         proc = Popen(cmd, stdout=PIPE, stderr=DN)
@@ -2036,7 +2042,7 @@ def get_bssid_from_cap(essid, capfile):
     cmd = ['tshark',
            '-r', capfile,
            '-R', 'eapol', 
-           '-n']
+           '-n', '-2']
     proc = Popen(cmd, stdout=PIPE, stderr=DN)
     proc.wait()
     for line in proc.communicate()[0].split('\n'):
@@ -2215,7 +2221,7 @@ class WPAAttack(Attack):
                               (GR + sec_to_hms(self.RUN_CONFIG.WPA_ATTACK_TIMEOUT - seconds_running) + W, \
                                G + str(self.RUN_CONFIG.WPA_DEAUTH_COUNT) + W, \
                                G + target_clients[client_index].bssid + W),
-                        cmd.append('-h')
+                        cmd.append('-c')
                         cmd.append(target_clients[client_index].bssid)
                     cmd.append(self.iface)
                     stdout.flush()
@@ -2249,8 +2255,8 @@ class WPAAttack(Attack):
 
                     # Save a copy of the handshake
                     rename(self.RUN_CONFIG.temp + 'wpa-01.cap.temp', save_as)
-                    remove_file('/root/new/wpa-01.cap')
-                    copy(save_as, '/root/new/wpa-01.cap')
+                    #remove_file('/root/new/wpa-01.cap')
+                    #copy(save_as, '/root/new/wpa-01.cap')
                     print '\n %s %shandshake captured%s! saved as "%s"' % (
                     GR + sec_to_hms(seconds_running) + W, G, W, G + save_as + W)
                     self.RUN_CONFIG.WPA_FINDINGS.append(
@@ -2317,7 +2323,7 @@ class WPAAttack(Attack):
             cmd = ['tshark',
                    '-r', capfile,  # Input file
                    '-R', 'eapol',  # Filter (only EAPOL packets)
-                   '-n']  # Do not resolve names (MAC vendors)
+                   '-n', '-2']  # Do not resolve names (MAC vendors)
             proc = Popen(cmd, stdout=PIPE, stderr=DN)
             proc.wait()
             lines = proc.communicate()[0].split('\n')
@@ -2512,7 +2518,7 @@ class WPAAttack(Attack):
             # strip results with tshark
             cmd = ['tshark',
                    '-r', capfile,  # input file
-                   '-R', 'eapol || wlan_mgt.tag.interpretation',  # filter
+                   '-R', 'eapol || wlan_mgt.tag.interpretation', '-2', # filter
                    '-w', capfile + '.temp']  # output file
             proc_strip = call(cmd, stdout=DN, stderr=DN)
 
@@ -3178,7 +3184,7 @@ class WEPAttack(Attack):
                    '--ignore-negative-one',
                    '--deauth', str(self.RUN_CONFIG.WPA_DEAUTH_COUNT),
                    '-a', target.bssid,
-                   '-h', client.bssid,
+                   '-c', client.bssid,
                    iface]
             call(cmd, stdout=DN, stderr=DN)
 
